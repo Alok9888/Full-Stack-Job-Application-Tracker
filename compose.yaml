@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-careertrack}
+      POSTGRES_USER: ${POSTGRES_USER:-careertrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-careertrack-local}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-careertrack} -d ${POSTGRES_DB:-careertrack}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-careertrack}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-careertrack}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-careertrack-local}
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-before-deploying-123456}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:8088}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
+      interval: 15s
+      timeout: 4s
+      retries: 10
+      start_period: 35s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: frontend
+    ports:
+      - "${WEB_PORT:-8088}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
